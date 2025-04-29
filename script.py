@@ -2,24 +2,32 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime, timedelta
 
-# Função para adicionar tarefa normal
+# Função para adicionar tarefa
 def adicionar_tarefa():
-    tarefa = entrada_tarefa.get()
+    tarefa = entrada_tarefa.get().strip()
     if tarefa:
-        lista_tarefas.insert(tk.END, f"📌 {tarefa}")
+        lista_tarefas.insert(tk.END, tarefa.capitalize())
         entrada_tarefa.delete(0, tk.END)
     else:
         messagebox.showwarning("Campo vazio", "Digite uma tarefa!")
 
 # Função para remover tarefa
 def remover_tarefa():
-    try:
-        selecionada = lista_tarefas.curselection()
+    selecionada = lista_tarefas.curselection()
+    if selecionada:
         lista_tarefas.delete(selecionada)
-    except:
-        messagebox.showwarning("Seleção inválida", "Selecione uma tarefa para remover.")
+    else:
+        messagebox.showwarning("Selecione", "Escolha uma tarefa para remover.")
 
-# Função para criar cronograma de estudo
+# Função para abrir janela de cronograma se a tarefa for "Estudar"
+def checar_duplo_clique(event):
+    indice = lista_tarefas.curselection()
+    if indice:
+        tarefa = lista_tarefas.get(indice[0]).lower()
+        if "estudar" in tarefa:
+            abrir_cronograma()
+
+# Função para gerar o cronograma de estudo
 def gerar_cronograma():
     inicio = entrada_inicio.get()
     fim = entrada_fim.get()
@@ -34,63 +42,132 @@ def gerar_cronograma():
         lista_cronograma.delete(0, tk.END)
         atual = inicio_dt
 
-        while atual + timedelta(minutes=30) <= fim_dt:
-            lista_cronograma.insert(tk.END, f"📘 Estudo: {atual.strftime('%H:%M')} - {(atual + timedelta(minutes=30)).strftime('%H:%M')}")
-            atual += timedelta(minutes=30)
+        blocos = [
+            (20, 10),
+            (30, 20),
+            (60, 20),
+            (120, 30),
+        ]
 
-            if atual + timedelta(minutes=10) <= fim_dt:
-                pausa = 10 if (atual.minute % 60 == 0 or lista_cronograma.size() == 1) else 20
-                lista_cronograma.insert(tk.END, f"☕ Pausa: {atual.strftime('%H:%M')} - {(atual + timedelta(minutes=pausa)).strftime('%H:%M')}")
-                atual += timedelta(minutes=pausa)
-    except:
-        messagebox.showerror("Erro", "Insira os horários no formato HH:MM (ex: 14:00)")
+        bloco_atual = 0
 
-# Criação da janela principal
+        while atual < fim_dt:
+            if bloco_atual < len(blocos):
+                estudo_min, descanso_min = blocos[bloco_atual]
+            else:
+                estudo_min, descanso_min = 120, 30
+
+            fim_estudo = atual + timedelta(minutes=estudo_min)
+            if fim_estudo > fim_dt:
+                estudo_min = int((fim_dt - atual).total_seconds() // 60)
+                fim_estudo = fim_dt
+
+            lista_cronograma.insert(tk.END, f"🧠 Estudo: {atual.strftime('%H:%M')} - {fim_estudo.strftime('%H:%M')}")
+            atual = fim_estudo
+
+            if atual >= fim_dt:
+                break
+
+            fim_descanso = atual + timedelta(minutes=descanso_min)
+            if fim_descanso >= fim_dt:
+                lista_cronograma.delete(tk.END)
+                lista_cronograma.insert(tk.END, f"🧠 Estudo: {inicio_dt.strftime('%H:%M')} - {fim_dt.strftime('%H:%M')}")
+                break
+
+            lista_cronograma.insert(tk.END, f"☕ Descanso: {atual.strftime('%H:%M')} - {fim_descanso.strftime('%H:%M')}")
+            atual = fim_descanso
+
+            bloco_atual += 1
+
+    except Exception as e:
+        print(e)
+        messagebox.showerror("Formato inválido", "Use o formato HH:MM (ex: 14:00)")
+
+# Função para abrir a janela de cronograma
+def abrir_cronograma():
+    janela = tk.Toplevel(root)
+    janela.title("Gerar Cronograma de Estudo")
+    janela.geometry("400x500")
+    janela.configure(bg="#f9f9f9")
+
+    ttk.Label(janela, text="Horário de Início (HH:MM):", style="TLabel").pack(pady=10)
+    global entrada_inicio
+    entrada_inicio = ttk.Entry(janela, font=('Segoe UI Light', 11))
+    entrada_inicio.pack(pady=10, ipadx=10, ipady=5)
+
+    ttk.Label(janela, text="Horário de Fim (HH:MM):", style="TLabel").pack(pady=10)
+    global entrada_fim
+    entrada_fim = ttk.Entry(janela, font=('Segoe UI Light', 11))
+    entrada_fim.pack(pady=10, ipadx=10, ipady=5)
+
+    ttk.Button(janela, text="Gerar Cronograma", style="RoundedButton.TButton", command=gerar_cronograma).pack(pady=20)
+
+    global lista_cronograma
+    lista_cronograma = tk.Listbox(janela, bg="#eeeeee", fg="#333333", font=('Segoe UI', 10), bd=0, highlightthickness=0, selectbackground="#c0c0c0", relief="flat")
+    lista_cronograma.pack(padx=20, pady=10, fill="both", expand=True)
+
+# --------------------------- #
+# Janela Principal
 root = tk.Tk()
-root.title("To-Do List + Estudo Planner")
-root.geometry("600x700")
-root.configure(bg="#1e1e2e")
+root.title("To-Do Minimalista + Estudo")
+root.geometry("400x500")
+root.configure(bg="#f9f9f9")
 
-# Estilo ttk
+# Estilo moderno
 style = ttk.Style()
 style.theme_use("clam")
-style.configure("TButton", background="#44475a", foreground="white", font=('Segoe UI', 10), padding=6)
-style.configure("TEntry", padding=6)
-style.configure("TLabel", background="#1e1e2e", foreground="white", font=('Segoe UI', 10))
-style.configure("TListbox", background="#282a36", foreground="white")
 
-# ---------------- SEÇÃO DE TAREFAS ---------------- #
-frame_tarefas = ttk.LabelFrame(root, text="📋 Tarefas", padding=10)
-frame_tarefas.pack(padx=20, pady=20, fill="x")
+style.configure("TButton",
+    font=('Segoe UI', 10),
+    background="#e0e0e0",
+    foreground="#333333",
+    borderwidth=0,
+    focusthickness=3,
+    focuscolor="none",
+    padding=10
+)
 
-entrada_tarefa = ttk.Entry(frame_tarefas, width=40)
-entrada_tarefa.pack(pady=5)
+style.configure("RoundedButton.TButton",
+    font=('Segoe UI', 10),
+    background="#007aff",
+    foreground="white",
+    borderwidth=0,
+    focusthickness=3,
+    focuscolor="none",
+    padding=10
+)
 
-btn_adicionar = ttk.Button(frame_tarefas, text="Adicionar Tarefa", command=adicionar_tarefa)
-btn_adicionar.pack(pady=5)
+style.map("RoundedButton.TButton",
+    background=[('active', '#0051a8')]
+)
 
-lista_tarefas = tk.Listbox(frame_tarefas, height=8, bg="#282a36", fg="white", font=("Segoe UI", 10))
-lista_tarefas.pack(pady=5, fill="x")
+style.configure("TEntry",
+    padding=10,
+    relief="flat",
+    font=('Segoe UI Light', 11)
+)
 
-btn_remover = ttk.Button(frame_tarefas, text="Remover Tarefa", command=remover_tarefa)
-btn_remover.pack(pady=5)
+style.configure("TLabel",
+    background="#f9f9f9",
+    foreground="#333333",
+    font=('Segoe UI Light', 11)
+)
 
-# ---------------- SEÇÃO DE ESTUDO ---------------- #
-frame_estudo = ttk.LabelFrame(root, text="📚 Planejamento de Estudo", padding=10)
-frame_estudo.pack(padx=20, pady=20, fill="x")
+# Entrada de tarefas
+entrada_tarefa = ttk.Entry(root, font=('Segoe UI Light', 11))
+entrada_tarefa.pack(pady=20, padx=20, fill="x", ipadx=10, ipady=5)
 
-ttk.Label(frame_estudo, text="Horário de Início (HH:MM):").pack(pady=2)
-entrada_inicio = ttk.Entry(frame_estudo)
-entrada_inicio.pack(pady=2)
+# Botões
+frame_botoes = ttk.Frame(root, style="TFrame")
+frame_botoes.pack(pady=5)
 
-ttk.Label(frame_estudo, text="Horário de Fim (HH:MM):").pack(pady=2)
-entrada_fim = ttk.Entry(frame_estudo)
-entrada_fim.pack(pady=2)
+ttk.Button(frame_botoes, text="Adicionar", style="RoundedButton.TButton", command=adicionar_tarefa).pack(side="left", padx=10)
+ttk.Button(frame_botoes, text="Remover", style="RoundedButton.TButton", command=remover_tarefa).pack(side="left", padx=10)
 
-btn_cronograma = ttk.Button(frame_estudo, text="Gerar Cronograma", command=gerar_cronograma)
-btn_cronograma.pack(pady=10)
+# Lista de tarefas
+lista_tarefas = tk.Listbox(root, bg="#eeeeee", fg="#333333", font=('Segoe UI', 11), bd=0, highlightthickness=0, selectbackground="#c0c0c0", relief="flat")
+lista_tarefas.pack(padx=20, pady=20, fill="both", expand=True)
 
-lista_cronograma = tk.Listbox(frame_estudo, height=10, bg="#282a36", fg="white", font=("Segoe UI", 10))
-lista_cronograma.pack(pady=5, fill="x")
+lista_tarefas.bind("<Double-Button-1>", checar_duplo_clique)
 
 root.mainloop()
